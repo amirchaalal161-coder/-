@@ -1,13 +1,378 @@
-const fs=require('fs'),{execSync}=require('child_process');if(!fs.existsSync('./package.json')){fs.writeFileSync('./package.json',JSON.stringify({name:"elite-bot",version:"1.0.0",main:"index.js",dependencies:{"@whiskeysockets/baileys":"^6.7.9","@hapi/boom":"^10.0.1",pino:"^9.0.0"}},null,2))}try{require('@whiskeysockets/baileys');require('@hapi/boom')}catch(e){console.log('⏳ Installing...');execSync('npm install',{stdio:'inherit'})}
-const{default:makeWASocket,useMultiFileAuthState,DisconnectReason}=require('@whiskeysockets/baileys'),{Boom}=require('@hapi/boom'),OWNER="213561055648@s.whatsapp.net",BOT_NUM="213555982437",dbFile='./database.json',VALID_CMDS=['تشغيل','ايقاف','تسجيل','نقاطي','بنك','رهان','تحويل','نخبة','مطور'];
-function loadDB(){if(!fs.existsSync(dbFile))fs.writeFileSync(dbFile,'{}');try{return JSON.parse(fs.readFileSync(dbFile,'utf-8'))}catch{return{}}}function saveDB(d){fs.writeFileSync(dbFile,JSON.stringify(d,null,2))}function checkAcc(i){let db=loadDB();if(!db[i]){db[i]={name:"غير مسجل",points:1000,weekly:0,bank:0,buys:0,joined:new Date().toLocaleDateString('ar-EG'),betCount:0};saveDB(db)}return db[i]}
-async function startBot(){const{state,saveCreds}=await useMultiFileAuthState('auth_info_baileys'),sock=makeWASocket({auth:state,printQRInTerminal:false,logger:require('pino')({level:'silent'})});if(!sock.authState.creds.registered){setTimeout(async()=>{try{let c=await sock.requestPairingCode(BOT_NUM);console.log(`\n🔥 ELITE BOT CODE: 【 ${c} 】\n`)}catch{}},7000)}sock.ev.on('creds.update',saveCreds);sock.ev.on('connection.update',u=>{if(u.connection==='close'){if((u.lastDisconnect.error instanceof Boom)?u.lastDisconnect.error.output.statusCode!==DisconnectReason.loggedOut:true)startBot()}else if(u.connection==='open')console.log('🚀 Connected!')});
-sock.ev.on('messages.upsert',async m=>{const msg=m.messages[0];if(!msg.message||msg.key.fromMe)return;const from=msg.key.remoteJid,sender=msg.key.participant||from,body=msg.message.conversation||msg.message.extendedTextMessage?.text||"";if(!body.startsWith('.'))return;const args=body.slice(1).trim().split(/ +/),command=args.shift().toLowerCase();let db=loadDB(),groupActive=db[`act_${from}`]!==false,isAdmin=false;if(from.endsWith('@g.us')){try{const meta=await sock.groupMetadata(from);isAdmin=meta.participants.find(p=>p.id===sender)?.admin!==null}catch{}}const isOwner=sender===OWNER,isElite=db[`elite_user` ]===sender;
-if(command==='نخبة'){if(db[`elite_user`]){let e=db[`elite_user`],t=`@${e.split('@')[0]}`;return sock.sendMessage(from,{text:`عمك ${t} هو النخبة الوحيد فالبوت يلا هش 🤫🔥`,mentions:[e]},{quoted:msg})}db[`elite_user`]=sender;saveDB(db);return sock.sendMessage(from,{text:`👑 *أصبحت الآن نخبة البوت وملك الصلاحيات!*`},{quoted:msg})}if(command==='مطور')return sock.sendMessage(from,{text:"👑 *مطور البوت:* +213567055648\n\n💪 🇩🇿 *تحيا الجزائر!*"},{quoted:msg});if(!VALID_CMDS.includes(command)){if(!groupActive&&!isOwner&&!isElite)return;return sock.sendMessage(from,{text:`❌ الأمر غير موجود، وشكراً.`},{quoted:msg})}
-if(command==='تشغيل'){if(!isAdmin&&!isOwner&&!isElite)return;db[`act_${from}`]=true;saveDB(db);return sock.sendMessage(from,{text:"⚡ *تم التفعيل!*"},{quoted:msg})}if(command==='ايقاف'){if(!isAdmin&&!isOwner&&!isElite)return;db[`act_${from}`]=false;saveDB(db);return sock.sendMessage(from,{text:"🛑 *تم الإيقاف!*"},{quoted:msg})}if(!groupActive&&!isOwner&&!isElite)return;
-if(command==='تسجيل'){let n=args.join(" ");if(!n)return sock.sendMessage(from,{text:"💡 مثال: `.تسجيل أحمد`"},{quoted:msg});checkAcc(sender);db=loadDB();db[sender].name=n;saveDB(db);return sock.sendMessage(from,{text:`تم تسجيل: *${n}* @${sender.split('@')[0]}\nمرحبا بك اتمنى تستمتع فالبوت مع اصحابك`,mentions:[sender]},{quoted:msg})}
-if(command==='نقاطي'){let u=checkAcc(sender);return sock.sendMessage(from,{text:`╭─「 👤 *بطاقتك* 」\n│ اللقب: *${u.name}*\n│ 📱 @${sender.split('@')[0]}\n│ 💰 النقاط الكلية: *${u.points}*\n│ 📅 هذا الأسبوع: *${u.weekly}*\n│ 🛒 مشتريات: *${u.buys}*\n│ 📆 انضم: *${u.joined}*\n╰──────────────────`,mentions:[sender]},{quoted:msg})}
-if(command==='بنك'){let s=args[0]?.toLowerCase(),amt=parseInt(args[1]),u=checkAcc(sender);if(!s)return sock.sendMessage(from,{text:`╭─「 🏦 *بنكك* 」\n│ 💰 نقاطك: *${u.points}*\n│ 🏦 رصيد البنك: *${u.bank}*\n│ 📌 الإيداع: *.بنك ايداع <مبلغ>*\n│ 📌 السحب: *.بنك سحب <مبلغ>*\n│ ⚠️ الرسوم: *10%*\n╰──────────────────`},{quoted:msg});db=loadDB();if(s==='ايداع'){if(isNaN(amt)||amt<=0||u.points<amt)return;let f=Math.floor(amt*0.1),net=amt-f;db[sender].points-=amt;db[sender].bank+=net;saveDB(db);return sock.sendMessage(from,{text:`✅ *تم الإيداع!*\n💸 المطلوب: ${amt}\n💳 الرسوم: ${f}\n🏦 تم إيداع: ${net}\n💰 نقاطك الآن: ${db[sender].points}\n🏦 البنك: ${db[sender].bank}`},{quoted:msg})}if(s==='سحب'){if(isNaN(amt)||amt<=0||u.bank<amt)return;db[sender].bank-=amt;db[sender].points+=amt;saveDB(db);return sock.sendMessage(from,{text:`تم السحب من البنك 🏦\nنقاطك الان: ${db[sender].points}\nرصيد البنك: ${db[sender].bank}`},{quoted:msg})}}
-if(command==='رهان'){let amt=parseInt(args[0]);if(isNaN(amt)||amt<=0)return;let u=checkAcc(sender);if(u.points<amt)return;db=loadDB();let w=false;if(amt===1){db[sender].betCount+=1;w=Math.random()<0.5}else{w=db[sender].betCount>=3?Math.random()<0.9:Math.random()<0.5;db[sender].betCount=0}if(w){db[sender].points+=amt;db[sender].weekly+=amt;saveDB(db);return sock.sendMessage(from,{text:`🎰 *ربحت الرهان!* 🎉\n💰 المبلغ: ${amt}\n📈 +${amt} نقطة\n💼 رصيدك: ${db[sender].points}\n@${sender.split('@')[0]} استمر! 🍀`,mentions:[sender]},{quoted:msg})}else{db[sender].points-=amt;saveDB(db);return sock.sendMessage(from,{text:`💀 *خسرت الرهان!*\n💰 المبلغ: ${amt}\n💼 رصيدك: ${db[sender].points}\n@${sender.split('@')[0]} حظ أفضل 😅`,mentions:[sender]},{quoted:msg})}}
-if(command==='تحويل'){let amt=parseInt(args[0]),rec=msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];if(!rec||isNaN(amt)||amt<=0)return;let u=checkAcc(sender);checkAcc(rec);db=loadDB();if(u.points<amt)return;db[sender].points-=amt;db[rec].points+=amt;db[rec].weekly+=amt;saveDB(db);return sock.sendMessage(from,{text:`✅ تم تحويل *${amt}* نقطة بنجاح.`},{quoted:msg})}});
-}startBot();
+// index.js — بوت النقاط + البنك + الرهان (واتساب)
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} = require("@whiskeysockets/baileys");
+const P = require("pino");
+const qrcode = require("qrcode-terminal");
+const express = require("express");
+const cron = require("node-cron");
+const fs = require("fs");
+const path = require("path");
+
+// ================= إعدادات ثابتة =================
+const DEV_NUMBER = "213561055648"; // بدون + وبدون @s.whatsapp.net
+const DEV_JID = DEV_NUMBER + "@s.whatsapp.net";
+const PREFIX = "."; // كل امر يجب أن يبدأ بنقطة
+const DB_PATH = path.join(__dirname, "db.json");
+const ELITE_START_POINTS = 250000;
+const BANK_DEPOSIT_FEE = 0.10; // 10%
+
+// ================= قاعدة بيانات بسيطة (JSON) =================
+function loadDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    const initial = { users: {}, groups: {}, eliteJid: null, bannedUsers: {} };
+    fs.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2));
+    return initial;
+  }
+  return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+}
+function saveDB(db) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+}
+let db = loadDB();
+function getUser(jid) {
+  if (!db.users[jid]) {
+    db.users[jid] = {
+      name: null,
+      points: 0,
+      weeklyPoints: 0,
+      bank: 0,
+      purchases: 0,
+      joinedAt: null,
+      oneStreak: 0, // عداد الرهانات المتتالية بنقطة واحدة (الجلتش)
+    };
+  }
+  return db.users[jid];
+}
+function fmtDate(ts) {
+  const d = new Date(ts);
+  return d.toLocaleDateString("ar-EG", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+// ================= صلاحيات =================
+function isDev(jid) {
+  return jid && jid.startsWith(DEV_NUMBER);
+}
+function isElite(jid) {
+  return db.eliteJid === jid;
+}
+async function isGroupAdmin(sock, groupId, jid) {
+  try {
+    const meta = await sock.groupMetadata(groupId);
+    const p = meta.participants.find((x) => x.id === jid);
+    return !!p && (p.admin === "admin" || p.admin === "superadmin");
+  } catch {
+    return false;
+  }
+}
+// ================= أدوات مساعدة =================
+function extractMentionedJid(msg) {
+  const ctx = msg.message?.extendedTextMessage?.contextInfo;
+  if (ctx?.mentionedJid?.length) return ctx.mentionedJid[0];
+  return null;
+}
+function getText(msg) {
+  return (
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    ""
+  );
+}
+const HELP_TEXT = `╭─「 📜 *قائمة الأوامر* 」
+│
+│ 👤 *أوامر الأعضاء*
+│ ${PREFIX}تسجيل <الاسم>
+│ ${PREFIX}نقاطي
+│ ${PREFIX}بنك
+│ ${PREFIX}بنك ايداع <عدد>
+│ ${PREFIX}بنك سحب <عدد>
+│ ${PREFIX}رهان <عدد>
+│ ${PREFIX}تحويل <عدد> @شخص
+│ ${PREFIX}نخبة
+│ ${PREFIX}مطور
+│ ${PREFIX}اوامر
+│
+│ 🛡️ *أوامر المشرفين*
+│ ${PREFIX}تشغيل
+│ ${PREFIX}ايقاف
+│
+│ 👑 *أوامر النخبة*
+│ ${PREFIX}حظر @شخص
+│ ${PREFIX}فك حظر @شخص
+╰──────────────────`;
+// ================= معالجة الرهان (مع الجلتش المطلوب) =================
+function placeBet(user, amount) {
+  let winChance = 0.5;
+  let bonusUsed = false;
+  if (user.oneStreak >= 3) {
+    winChance = 0.9;
+    bonusUsed = true;
+  }
+  const won = Math.random() < winChance;
+  if (won) {
+    user.points += amount;
+  } else {
+    user.points -= amount;
+  }
+  // تحديث عداد التتالي
+  if (bonusUsed) {
+    user.oneStreak = 0; // بعد استخدام البونص يصفر العداد
+  } else if (amount === 1) {
+    user.oneStreak += 1;
+  } else {
+    user.oneStreak = 0;
+  }
+  return won;
+}
+// ================= بدء البوت =================
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, "auth_info"));
+  const { version } = await fetchLatestBaileysVersion();
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false,
+    logger: P({ level: "silent" }),
+  });
+  sock.ev.on("creds.update", saveCreds);
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    if (qr) {
+      console.log("امسح رمز QR التالي من واتساب (الأجهزة المرتبطة):");
+      qrcode.generate(qr, { small: true });
+    }
+    if (connection === "close") {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log("انقطع الاتصال، إعادة المحاولة:", shouldReconnect);
+      if (shouldReconnect) startBot();
+    } else if (connection === "open") {
+      console.log("✅ البوت متصل الآن");
+    }
+  });
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+    try {
+      const msg = messages[0];
+      if (!msg.message || msg.key.fromMe) return;
+      const from = msg.key.remoteJid; // آيدي الجروب أو الخاص
+      const isGroup = from.endsWith("@g.us");
+      const sender = isGroup ? msg.key.participant : from;
+      const text = getText(msg).trim();
+      if (!text.startsWith(PREFIX)) return; // يجب أن تبدأ بنقطة
+      const body = text.slice(PREFIX.length).trim();
+      const [cmdRaw, ...args] = body.split(/\s+/);
+      const cmd = cmdRaw;
+      const argStr = args.join(" ").trim();
+      const reply = (t, mentions = []) =>
+        sock.sendMessage(from, { text: t, mentions }, { quoted: msg });
+      // ------------ تشغيل / ايقاف (لا تخضع لفحص التفعيل ولا للحظر) ------------
+      if (cmd === "تشغيل") {
+        if (!isGroup) return reply("هذا الأمر يعمل داخل الجروبات فقط.");
+        const allowed = isDev(sender) || (await isGroupAdmin(sock, from, sender));
+        if (!allowed) return reply("هذا الأمر مخصص لمشرفي الجروب أو المطور فقط.");
+        db.groups[from] = db.groups[from] || {};
+        db.groups[from].active = true;
+        saveDB(db);
+        return reply("✅ تم تشغيل البوت في هذا الجروب.");
+      }
+      if (cmd === "ايقاف") {
+        if (!isGroup) return reply("هذا الأمر يعمل داخل الجروبات فقط.");
+        const allowed = isDev(sender) || (await isGroupAdmin(sock, from, sender));
+        if (!allowed) return reply("هذا الأمر مخصص لمشرفي الجروب أو المطور فقط.");
+        db.groups[from] = db.groups[from] || {};
+        db.groups[from].active = false;
+        saveDB(db);
+        return reply("🛑 تم إيقاف البوت في هذا الجروب.");
+      }
+      // ------------ فحص التفعيل (داخل الجروبات) ------------
+      if (isGroup && !(db.groups[from] && db.groups[from].active)) {
+        return; // البوت متوقف في هذا الجروب، يتجاهل بقية الأوامر
+      }
+      // ------------ فحص الحظر ------------
+      if (db.bannedUsers[sender]) {
+        return reply("🚫 أنت محظور من استخدام البوت.");
+      }
+      const user = getUser(sender);
+      switch (cmd) {
+        case "تسجيل": {
+          if (!argStr) return reply("اكتب اسمك بعد كلمة تسجيل. مثال: .تسجيل احمد");
+          user.name = argStr;
+          user.joinedAt = user.joinedAt || Date.now();
+          saveDB(db);
+          return reply(`تم تسجيل: *${argStr}* @${sender.split("@")[0]}\nمرحبا بك اتمنى تستمتع فالبوت مع اصحابك`, [sender]);
+        }
+        case "نقاطي": {
+          const card =
+`╭─「 👤 *بطاقتك* 」
+│
+│ اللقب: *${user.name || "غير مسجل"}*
+│ 📱 @${sender.split("@")[0]}
+│ 💰 النقاط الكلية: *${user.points}*
+│ 📅 هذا الأسبوع: *${user.weeklyPoints}*
+│ 🛒 مشتريات: ${user.purchases}
+│ 📆 انضم: ${user.joinedAt ? fmtDate(user.joinedAt) : "غير معروف"}
+╰──────────────────`;
+          return reply(card, [sender]);
+        }
+        case "بنك": {
+          if (args[0] === "ايداع") {
+            const amount = parseInt(args[1], 10);
+            if (!amount || amount <= 0) return reply("اكتب عدد صحيح موجب. مثال: .بنك ايداع 100");
+            if (amount > user.points) return reply("ليس لديك نقاط كافية لهذا الإيداع.");
+            const fee = Math.floor(amount * BANK_DEPOSIT_FEE);
+            const deposited = amount - fee;
+            user.points -= amount;
+            user.bank += deposited;
+            saveDB(db);
+            return reply(
+`✅ *تم الإيداع في البنك!*
+💸 المبلغ المطلوب: *${amount}* نقطة
+💳 رسوم الإيداع (10%): *${fee}* نقطة
+🏦 تم إيداع: *${deposited}* نقطة
+💰 نقاطك الآن: *${user.points}*
+🏦 رصيد البنك: *${user.bank}*`
+            );
+          }
+          if (args[0] === "سحب") {
+            let amount = args[1] ? parseInt(args[1], 10) : user.bank;
+            if (!amount || amount <= 0) return reply("لا يوجد رصيد للسحب.");
+            if (amount > user.bank) return reply("رصيد بنكك أقل من المبلغ المطلوب.");
+            user.bank -= amount;
+            user.points += amount;
+            saveDB(db);
+            return reply(
+`تم السحب من البنك 🏦
+نقاطك الان: ${user.points}
+رصيد البنك: ${user.bank}`
+            );
+          }
+          const bankCard =
+`╭─「 🏦 *بنكك* 」
+│
+│ 💰 نقاطك الحالية: *${user.points}*
+│ 🏦 رصيد البنك: *${user.bank}*
+│
+│ 📌 الإيداع: *${PREFIX}بنك ايداع <مبلغ>*
+│ 📌 السحب: *${PREFIX}بنك سحب* (أو *${PREFIX}بنك سحب <مبلغ>*)
+│
+│ ⚠️ رسوم الإيداع: *10%* من كل إيداع
+│ ✅ البنك لا يُصفَّر عند التجديد الأسبوعي
+╰──────────────────`;
+          return reply(bankCard);
+        }
+        case "رهان": {
+          const amount = parseInt(args[0], 10);
+          if (!amount || amount <= 0) return reply("اكتب عدد صحيح موجب. مثال: .رهان 50");
+          if (amount > user.points) return reply("ليس لديك نقاط كافية لهذا الرهان.");
+          const won = placeBet(user, amount);
+          user.weeklyPoints += won ? amount : 0;
+          saveDB(db);
+          if (won) {
+            return reply(
+`🎰 *ربحت الرهان!* 🎉
+💰 مبلغ الرهان: *${amount}* نقطة
+✨ *الحظ حالفك — ربحت مثل مبلغ رهانك!*
+📈 +*${amount}* نقطة
+💼 رصيدك الحالي: *${user.points}*
+@${sender.split("@")[0]} استمر تراهن! 🍀`,
+              [sender]
+            );
+          } else {
+            return reply(
+`💀 *خسرت الرهان!*
+💰 مبلغ الرهان: *${amount}* نقطة
+☠️ *ما حالفك الحظ هذي المرة*
+💼 رصيدك الحالي: *${user.points}*
+@${sender.split("@")[0]} حظ أفضل في المرة القادمة 😅`,
+              [sender]
+            );
+          }
+        }
+        case "تحويل": {
+          const amount = parseInt(args[0], 10);
+          const targetJid = extractMentionedJid(msg);
+          if (!amount || amount <= 0 || !targetJid) {
+            return reply("الصيغة: .تحويل <عدد> @الشخص");
+          }
+          if (amount > user.points) return reply("ليس لديك نقاط كافية لهذا التحويل.");
+          if (targetJid === sender) return reply("لا يمكنك تحويل نقاط لنفسك.");
+          const target = getUser(targetJid);
+          user.points -= amount;
+          target.points += amount;
+          saveDB(db);
+          return reply(
+            `✅ تم تحويل *${amount}* نقطة من @${sender.split("@")[0]} إلى @${targetJid.split("@")[0]}`,
+            [sender, targetJid]
+          );
+        }
+        case "نخبة": {
+          if (db.eliteJid) {
+            if (db.eliteJid === sender) return reply("أنت بالفعل النخبة الوحيد 👑");
+            return reply(
+              `النخبة الوحيد هو @${db.eliteJid.split("@")[0]} 👑\n@${sender.split("@")[0]} يلا هش هش 😹`,
+              [db.eliteJid, sender]
+            );
+          }
+          db.eliteJid = sender;
+          user.points += ELITE_START_POINTS;
+          saveDB(db);
+          return reply(
+            `👑 تهانينا! أنت الآن *النخبة* الوحيد في البوت.\n💰 حصلت على *${ELITE_START_POINTS}* نقطة.`,
+            [sender]
+          );
+        }
+        case "مطور": {
+          return reply(
+`👨‍💻 المطور هو: +${DEV_NUMBER}
+🇩🇿 تحيا الجزائر`
+          );
+        }
+        case "حظر": {
+          if (!isElite(sender)) return reply("هذا الأمر مخصص للنخبة فقط.");
+          const targetJid = extractMentionedJid(msg);
+          if (!targetJid) return reply("منشن الشخص المراد حظره. مثال: .حظر @شخص");
+          db.bannedUsers[targetJid] = true;
+          saveDB(db);
+          return reply(`🚫 تم حظر @${targetJid.split("@")[0]} من استخدام البوت.`, [targetJid]);
+        }
+        case "فك": {
+          if (args[0] !== "حظر") break;
+          if (!isElite(sender)) return reply("هذا الأمر مخصص للنخبة فقط.");
+          const targetJid = extractMentionedJid(msg);
+          if (!targetJid) return reply("منشن الشخص المراد فك حظره. مثال: .فك حظر @شخص");
+          delete db.bannedUsers[targetJid];
+          saveDB(db);
+          return reply(`✅ تم فك الحظر عن @${targetJid.split("@")[0]}`, [targetJid]);
+        }
+        case "اوامر": {
+          return reply(HELP_TEXT);
+        }
+        default: {
+          return reply("اسف الامر غير موجود 🙏");
+        }
+      }
+      // حالة "فك" بدون "حظر" بعدها
+      return reply("اسف الامر غير موجود 🙏");
+    } catch (err) {
+      console.error("خطأ في معالجة الرسالة:", err);
+    }
+  });
+  return sock;
+}
+// ================= إعادة تعيين نقاط الأسبوع (كل أحد الساعة 00:00) =================
+cron.schedule("0 0 * * 0", () => {
+  db = loadDB();
+  for (const jid in db.users) {
+    db.users[jid].weeklyPoints = 0;
+  }
+  saveDB(db);
+  console.log("🔄 تم تصفير نقاط الأسبوع لكل المستخدمين (البنك لم يُمس).");
+});
+// ================= سيرفر خفيف لإبقاء البوت مستيقظ على Render =================
+const app = express();
+app.get("/", (req, res) => res.send("🤖 البوت شغال."));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🌐 سيرفر البقاء حي يعمل على المنفذ ${PORT}`));
+startBot();
